@@ -1,8 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useEvents } from '../../contexts/EventContext';
 import { EventType } from '../../types';
 import { Calendar, Clock, MapPin, Users, Tag, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { supabase } from '../../lib/supabase';
+import type { Database } from '../../lib/database.types';
+
+type Event = Database['public']['Tables']['events']['Insert'];
+type Venue = Database['public']['Tables']['venues']['Row'];
 
 interface AddEventFormProps {
   onClose: () => void;
@@ -11,6 +16,7 @@ interface AddEventFormProps {
 const AddEventForm: React.FC<AddEventFormProps> = ({ onClose }) => {
   const { addEvent } = useEvents();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [venues, setVenues] = useState<Venue[]>([]);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -22,10 +28,29 @@ const AddEventForm: React.FC<AddEventFormProps> = ({ onClose }) => {
     image: '',
     capacity: '',
     price: '',
-    society: '',
+    venue: '',
     type: EventType.SOCIAL,
     stallsAvailable: '0',
   });
+
+  useEffect(() => {
+    // Fetch venues when component mounts
+    const fetchVenues = async () => {
+      const { data, error } = await supabase
+        .from('venues')
+        .select('*')
+        .order('name');
+
+      if (error) {
+        console.error('Error fetching venues:', error);
+        toast.error('Failed to load venues');
+      } else {
+        setVenues(data || []);
+      }
+    };
+
+    fetchVenues();
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -43,7 +68,7 @@ const AddEventForm: React.FC<AddEventFormProps> = ({ onClose }) => {
       // Validate form data
       if (!formData.title || !formData.description || !formData.startDate || !formData.startTime ||
           !formData.endDate || !formData.endTime || !formData.location || !formData.capacity ||
-          !formData.society) {
+          !formData.venue) {
         throw new Error('Please fill in all required fields');
       }
 
@@ -56,30 +81,71 @@ const AddEventForm: React.FC<AddEventFormProps> = ({ onClose }) => {
         throw new Error('End date must be after start date');
       }
 
+      // Get venue ID from name
+      const selectedVenue = venues.find(v => v.name === formData.venue);
+      if (!selectedVenue) {
+        console.error('Venue not found:', formData.venue);
+        throw new Error('Invalid venue selected');
+      }
+
       // Prepare event data
-      const eventData = {
+      const eventData: Event = {
         title: formData.title,
         description: formData.description,
-        startDate,
-        endDate,
+        start_date: startDate.toISOString(),
+        end_date: endDate.toISOString(),
         location: formData.location,
-        image: formData.image || 'https://images.pexels.com/photos/976866/pexels-photo-976866.jpeg', // Default image
+        image: formData.image || 'https://images.pexels.com/photos/976866/pexels-photo-976866.jpeg',
         capacity: parseInt(formData.capacity),
-        registeredCount: 0,
+        registered_count: 0,
         price: parseFloat(formData.price) || 0,
-        society: formData.society,
-        type: formData.type,
-        stallsAvailable: parseInt(formData.stallsAvailable) || 0,
-        stallsBooked: 0,
+        venue_id: selectedVenue.id,
+        type: formData.type.toUpperCase() as 'CULTURAL' | 'FITNESS' | 'SOCIAL' | 'EXHIBITION' | 'WORKSHOP',
+        stalls_available: parseInt(formData.stallsAvailable) || 0,
+        stalls_booked: 0
       };
 
-      // Add event
-      addEvent(eventData);
+      console.log('Submitting event data:', eventData);
+
+      // Insert event into Supabase
+      const { data, error } = await supabase
+        .from('events')
+        .insert(eventData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw new Error('Database error: ' + error.message);
+      }
+
+      if (!data) {
+        throw new Error('No data returned from event creation');
+      }
+
+      // Add event to local state
+      addEvent({
+        title: data.title,
+        description: data.description,
+        startDate: new Date(data.start_date),
+        endDate: new Date(data.end_date),
+        location: data.location,
+        image: data.image || '',
+        capacity: data.capacity,
+        registeredCount: data.registered_count,
+        price: data.price,
+        society: selectedVenue.name, // Keep society field for backward compatibility
+        type: data.type.toLowerCase() as EventType,
+        stallsAvailable: data.stalls_available,
+        stallsBooked: data.stalls_booked
+      });
+
       toast.success('Event created successfully!');
       onClose();
     } catch (error) {
       console.error('Error creating event:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to create event');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create event';
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -249,7 +315,7 @@ const AddEventForm: React.FC<AddEventFormProps> = ({ onClose }) => {
           </div>
         </div>
 
-        {/* Price and Society */}
+        {/* Price and Venue */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label htmlFor="price" className="block text-sm font-medium text-gray-700">
@@ -267,18 +333,24 @@ const AddEventForm: React.FC<AddEventFormProps> = ({ onClose }) => {
           </div>
 
           <div>
-            <label htmlFor="society" className="block text-sm font-medium text-gray-700">
-              Society *
+            <label htmlFor="venue" className="block text-sm font-medium text-gray-700">
+              Venue *
             </label>
-            <input
-              type="text"
-              id="society"
-              name="society"
-              value={formData.society}
+            <select
+              id="venue"
+              name="venue"
+              value={formData.venue}
               onChange={handleInputChange}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               required
-            />
+            >
+              <option value="">Select a venue</option>
+              {venues.map((venue) => (
+                <option key={venue.id} value={venue.name}>
+                  {venue.name} - {venue.address}, {venue.city}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

@@ -77,6 +77,68 @@ export interface Database {
           updated_by?: string | null
         }
       }
+      events: {
+        Row: {
+          id: string
+          title: string
+          description: string
+          start_date: string
+          end_date: string
+          location: string
+          image: string | null
+          capacity: number
+          registered_count: number
+          price: number
+          venue_id: string
+          type: 'CULTURAL' | 'FITNESS' | 'SOCIAL' | 'EXHIBITION' | 'WORKSHOP'
+          stalls_available: number
+          stalls_booked: number
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+        }
+        Insert: {
+          id?: string
+          title: string
+          description: string
+          start_date: string
+          end_date: string
+          location: string
+          image?: string | null
+          capacity: number
+          registered_count?: number
+          price?: number
+          venue_id: string
+          type: 'CULTURAL' | 'FITNESS' | 'SOCIAL' | 'EXHIBITION' | 'WORKSHOP'
+          stalls_available?: number
+          stalls_booked?: number
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          title?: string
+          description?: string
+          start_date?: string
+          end_date?: string
+          location?: string
+          image?: string | null
+          capacity?: number
+          registered_count?: number
+          price?: number
+          venue_id?: string
+          type?: 'CULTURAL' | 'FITNESS' | 'SOCIAL' | 'EXHIBITION' | 'WORKSHOP'
+          stalls_available?: number
+          stalls_booked?: number
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
+        }
+      }
     }
     Views: {
       [_ in never]: never
