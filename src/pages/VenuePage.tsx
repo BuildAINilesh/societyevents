@@ -1,16 +1,18 @@
-import React, { useState } from 'react';
-import { MapPin, Building2, Users, Calendar, Clock, Image as ImageIcon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { MapPin, Building2, Users, Calendar, Clock, Image as ImageIcon, Phone, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import type { Database } from '../lib/database.types';
 
 type Venue = Database['public']['Tables']['venues']['Insert'];
+type VenueRow = Database['public']['Tables']['venues']['Row'];
 
 interface VenueFormData {
   name: string;
   address: string;
   city: string;
   state: string;
+  pinCode: string;
   capacity: string;
   description: string;
   contactPerson: string;
@@ -28,11 +30,14 @@ interface VenueFormData {
 const VenuePage: React.FC = () => {
   const [showRegistrationForm, setShowRegistrationForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [venues, setVenues] = useState<VenueRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [formData, setFormData] = useState<VenueFormData>({
     name: '',
     address: '',
     city: '',
     state: '',
+    pinCode: '',
     capacity: '',
     description: '',
     contactPerson: '',
@@ -64,6 +69,27 @@ const VenuePage: React.FC = () => {
     'Outdoor Space',
     'Dance Floor',
   ];
+
+  useEffect(() => {
+    fetchVenues();
+  }, []);
+
+  const fetchVenues = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('venues')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setVenues(data || []);
+    } catch (error) {
+      console.error('Error fetching venues:', error);
+      toast.error('Failed to load venues');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -102,6 +128,14 @@ const VenuePage: React.FC = () => {
       const previews = validFiles.map(file => URL.createObjectURL(file));
       setImagePreview(prev => [...prev, ...previews]);
     }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index)
+    }));
+    setImagePreview(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleAmenityToggle = (amenity: string) => {
@@ -164,6 +198,7 @@ const VenuePage: React.FC = () => {
         address: formData.address,
         city: formData.city,
         state: formData.state,
+        pin_code: formData.pinCode,
         capacity: parseInt(formData.capacity),
         description: formData.description,
         contact_person: formData.contactPerson,
@@ -173,7 +208,7 @@ const VenuePage: React.FC = () => {
         amenities: selectedAmenities,
         price_per_day: parseFloat(formData.pricePerDay),
         available_from: formData.availableDates.startDate,
-        available_until: formData.availableDates.endDate,
+        available_until: formData.availableDates.endDate
       };
 
       // Insert venue data into Supabase
@@ -183,7 +218,10 @@ const VenuePage: React.FC = () => {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw new Error(error.message || 'Failed to register venue');
+      }
 
       toast.success('Venue registered successfully!');
       setShowRegistrationForm(false);
@@ -194,6 +232,7 @@ const VenuePage: React.FC = () => {
         address: '',
         city: '',
         state: '',
+        pinCode: '',
         capacity: '',
         description: '',
         contactPerson: '',
@@ -210,6 +249,9 @@ const VenuePage: React.FC = () => {
       setSelectedAmenities([]);
       setImagePreview([]);
 
+      // Refresh venues list
+      await fetchVenues();
+
     } catch (error) {
       console.error('Error creating venue:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to register venue. Please try again.');
@@ -220,28 +262,20 @@ const VenuePage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Venue Management</h1>
-        <p className="mt-2 text-gray-600">Register and manage venues for your events</p>
+      <div className="mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Venue Management</h1>
+          <p className="mt-2 text-gray-600">Register and manage venues for your events</p>
+        </div>
+        <button
+          onClick={() => setShowRegistrationForm(true)}
+          className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+        >
+          Register New Venue
+        </button>
       </div>
 
-      {!showRegistrationForm ? (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="text-center">
-            <Building2 size={48} className="mx-auto text-blue-600 mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Register Your Venue</h2>
-            <p className="text-gray-600 mb-6">
-              List your venue and start hosting events. Reach out to event organizers and expand your business.
-            </p>
-            <button
-              onClick={() => setShowRegistrationForm(true)}
-              className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              Register New Venue
-            </button>
-          </div>
-        </div>
-      ) : (
+      {showRegistrationForm ? (
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900">Venue Registration</h2>
@@ -304,7 +338,7 @@ const VenuePage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                   <label htmlFor="city" className="block text-sm font-medium text-gray-700">
                     City
@@ -332,6 +366,23 @@ const VenuePage: React.FC = () => {
                     onChange={handleInputChange}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     required
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="pinCode" className="block text-sm font-medium text-gray-700">
+                    Pin Code
+                  </label>
+                  <input
+                    type="text"
+                    id="pinCode"
+                    name="pinCode"
+                    value={formData.pinCode}
+                    onChange={handleInputChange}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    required
+                    pattern="[0-9]{6}"
+                    title="Please enter a valid 6-digit pin code"
                   />
                 </div>
               </div>
@@ -506,12 +557,20 @@ const VenuePage: React.FC = () => {
               {imagePreview.length > 0 && (
                 <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
                   {imagePreview.map((preview, index) => (
-                    <div key={index} className="relative">
+                    <div key={index} className="relative group">
                       <img
                         src={preview}
                         alt={`Preview ${index + 1}`}
                         className="h-24 w-full object-cover rounded-lg"
                       />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImage(index)}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Remove image"
+                      >
+                        ✕
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -537,6 +596,62 @@ const VenuePage: React.FC = () => {
               </button>
             </div>
           </form>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {isLoading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading venues...</p>
+            </div>
+          ) : venues.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {venues.map((venue) => (
+                <div key={venue.id} className="bg-white rounded-lg shadow-md p-6">
+                  <h3 className="text-xl font-semibold text-gray-900 mb-4">{venue.name}</h3>
+                  <div className="space-y-3">
+                    <div className="flex items-start">
+                      <MapPin className="h-5 w-5 text-gray-400 mt-0.5 mr-3" />
+                      <div>
+                        <p className="text-gray-900">{venue.address}</p>
+                        <p className="text-gray-600 text-sm">
+                          {venue.city}, {venue.state} - {venue.pin_code}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center">
+                      <User className="h-5 w-5 text-gray-400 mr-3" />
+                      <p className="text-gray-600">{venue.contact_person}</p>
+                    </div>
+                    <div className="flex items-center">
+                      <Phone className="h-5 w-5 text-gray-400 mr-3" />
+                      <p className="text-gray-600">{venue.contact_phone}</p>
+                    </div>
+                    <div className="flex items-center">
+                      <Users className="h-5 w-5 text-gray-400 mr-3" />
+                      <p className="text-gray-600">Capacity: {venue.capacity} people</p>
+                    </div>
+                    <div className="flex items-center">
+                      <Calendar className="h-5 w-5 text-gray-400 mr-3" />
+                      <p className="text-gray-600">
+                        Available: {new Date(venue.available_from).toLocaleDateString()} - {new Date(venue.available_until).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="text-center">
+                <Building2 size={48} className="mx-auto text-gray-400 mb-4" />
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">No Venues Found</h2>
+                <p className="text-gray-600 mb-6">
+                  Start by registering your first venue to host events.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

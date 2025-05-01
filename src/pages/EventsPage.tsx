@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useEvents } from '../contexts/EventContext';
 import EventCard from '../components/Events/EventCard';
-import { Search, Filter, Calendar, MapPin } from 'lucide-react';
+import AddEventForm from '../components/Events/AddEventForm';
+import { Search, Filter, Calendar, MapPin, Plus } from 'lucide-react';
 import { EventType } from '../types';
 import { mockSocieties } from '../data/mockData';
 
@@ -11,6 +12,7 @@ const EventsPage: React.FC = () => {
   const [selectedType, setSelectedType] = useState<EventType | ''>('');
   const [selectedSociety, setSelectedSociety] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [showAddEventForm, setShowAddEventForm] = useState(false);
 
   // Apply filters when search term, type, or society changes
   useEffect(() => {
@@ -45,9 +47,18 @@ const EventsPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Events</h1>
-        <p className="mt-2 text-gray-600">Browse and discover upcoming events in your community</p>
+      <div className="mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Events</h1>
+          <p className="mt-2 text-gray-600">Browse and discover upcoming events in your community</p>
+        </div>
+        <button
+          onClick={() => setShowAddEventForm(true)}
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        >
+          <Plus size={20} className="mr-2" />
+          Add New Event
+        </button>
       </div>
 
       <div className="flex flex-col md:flex-row justify-between mb-6">
@@ -273,6 +284,15 @@ const EventsPage: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* Add Event Form Modal */}
+      {showAddEventForm && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50">
+          <div className="max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <AddEventForm onClose={() => setShowAddEventForm(false)} />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

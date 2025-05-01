@@ -16,26 +16,7 @@ export interface Database {
           address: string
           city: string
           state: string
-          capacity: number
-          description: string
-          contact_person: string
-          contact_phone: string
-          contact_email: string
-          images: string[]
-          amenities: string[]
-          price_per_day: number
-          available_from: string
-          available_until: string
-          created_at: string
-          updated_at: string
-          created_by: string | null
-        }
-        Insert: {
-          id?: string
-          name: string
-          address: string
-          city: string
-          state: string
+          pin_code: string
           capacity: number
           description: string
           contact_person: string
@@ -49,6 +30,29 @@ export interface Database {
           created_at?: string
           updated_at?: string
           created_by?: string | null
+          updated_by?: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          address: string
+          city: string
+          state: string
+          pin_code: string
+          capacity: number
+          description: string
+          contact_person: string
+          contact_phone: string
+          contact_email: string
+          images: string[]
+          amenities: string[]
+          price_per_day: number
+          available_from: string
+          available_until: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+          updated_by?: string | null
         }
         Update: {
           id?: string
@@ -56,6 +60,7 @@ export interface Database {
           address?: string
           city?: string
           state?: string
+          pin_code?: string
           capacity?: number
           description?: string
           contact_person?: string
@@ -69,6 +74,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
           created_by?: string | null
+          updated_by?: string | null
         }
       }
     }
