@@ -9,11 +9,13 @@ import DashboardPage from './pages/DashboardPage';
 import CommunityPage from './pages/CommunityPage';
 import VenuePage from './pages/VenuePage';
 import { EventProvider } from './contexts/EventContext';
+import { Toaster } from 'react-hot-toast';
 
 function App() {
   return (
     <Router>
       <EventProvider>
+        <Toaster position="top-right" />
         <Layout>
           <Routes>
             <Route path="/" element={<HomePage />} />

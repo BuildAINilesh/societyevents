@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
 import { MapPin, Building2, Users, Calendar, Clock, Image as ImageIcon } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { toast } from 'react-hot-toast';
+import type { Database } from '../lib/database.types';
+
+type Venue = Database['public']['Tables']['venues']['Insert'];
 
 interface VenueFormData {
   name: string;
@@ -22,6 +27,7 @@ interface VenueFormData {
 
 const VenuePage: React.FC = () => {
   const [showRegistrationForm, setShowRegistrationForm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<VenueFormData>({
     name: '',
     address: '',
@@ -66,7 +72,7 @@ const VenuePage: React.FC = () => {
       setFormData(prev => ({
         ...prev,
         [parent]: {
-          ...prev[parent as keyof VenueFormData],
+          ...(prev[parent as keyof VenueFormData] as object),
           [child]: value,
         },
       }));
@@ -81,13 +87,19 @@ const VenuePage: React.FC = () => {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
+      // Validate file size (10MB limit)
+      const validFiles = files.filter(file => file.size <= 10 * 1024 * 1024);
+      if (validFiles.length !== files.length) {
+        toast.error('Some files were too large. Maximum size is 10MB.');
+      }
+
       setFormData(prev => ({
         ...prev,
-        images: [...prev.images, ...files],
+        images: [...prev.images, ...validFiles],
       }));
 
       // Create preview URLs
-      const previews = files.map(file => URL.createObjectURL(file));
+      const previews = validFiles.map(file => URL.createObjectURL(file));
       setImagePreview(prev => [...prev, ...previews]);
     }
   };
@@ -101,15 +113,109 @@ const VenuePage: React.FC = () => {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const uploadImages = async (files: File[]): Promise<string[]> => {
+    try {
+      const uploadPromises = files.map(async (file) => {
+        const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+        const { data, error } = await supabase.storage
+          .from('venue-images')
+          .upload(fileName, file);
+
+        if (error) {
+          throw error;
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('venue-images')
+          .getPublicUrl(fileName);
+
+        return publicUrl;
+      });
+
+      return Promise.all(uploadPromises);
+    } catch (error) {
+      console.error('Error uploading images:', error);
+      throw new Error('Failed to upload images');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const finalFormData = {
-      ...formData,
-      amenities: selectedAmenities,
-    };
-    console.log('Form submitted:', finalFormData);
-    // TODO: Implement actual venue registration logic
-    setShowRegistrationForm(false);
+    
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
+
+    try {
+      // Validate form data
+      if (!formData.name || !formData.address || !formData.city || !formData.state || 
+          !formData.capacity || !formData.description || !formData.contactPerson || 
+          !formData.contactPhone || !formData.contactEmail || !formData.pricePerDay || 
+          !formData.availableDates.startDate || !formData.availableDates.endDate) {
+        throw new Error('Please fill in all required fields');
+      }
+
+      // Upload images first
+      const imageUrls = formData.images.length > 0 ? await uploadImages(formData.images) : [];
+
+      // Prepare venue data
+      const venueData: Venue = {
+        name: formData.name,
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        capacity: parseInt(formData.capacity),
+        description: formData.description,
+        contact_person: formData.contactPerson,
+        contact_phone: formData.contactPhone,
+        contact_email: formData.contactEmail,
+        images: imageUrls,
+        amenities: selectedAmenities,
+        price_per_day: parseFloat(formData.pricePerDay),
+        available_from: formData.availableDates.startDate,
+        available_until: formData.availableDates.endDate,
+      };
+
+      // Insert venue data into Supabase
+      const { data, error } = await supabase
+        .from('venues')
+        .insert(venueData)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast.success('Venue registered successfully!');
+      setShowRegistrationForm(false);
+      
+      // Reset form
+      setFormData({
+        name: '',
+        address: '',
+        city: '',
+        state: '',
+        capacity: '',
+        description: '',
+        contactPerson: '',
+        contactPhone: '',
+        contactEmail: '',
+        images: [],
+        amenities: [],
+        pricePerDay: '',
+        availableDates: {
+          startDate: '',
+          endDate: '',
+        },
+      });
+      setSelectedAmenities([]);
+      setImagePreview([]);
+
+    } catch (error) {
+      console.error('Error creating venue:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to register venue. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -422,9 +528,12 @@ const VenuePage: React.FC = () => {
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                disabled={isSubmitting}
+                className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 ${
+                  isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
               >
-                Register Venue
+                {isSubmitting ? 'Registering...' : 'Register Venue'}
               </button>
             </div>
           </form>
