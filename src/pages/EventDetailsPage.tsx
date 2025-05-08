@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useEvents } from '../contexts/EventContext';
 import { Calendar, Clock, MapPin, Users, Tag, Share2, Bookmark, AlertCircle, MessageSquare, ShoppingBag } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 
 const EventDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { getEventById } = useEvents();
+  const { getEventById, updateEvent } = useEvents();
   const event = getEventById(id || '');
   const [isRegistering, setIsRegistering] = useState(false);
   const [formData, setFormData] = useState({
@@ -13,6 +15,17 @@ const EventDetailsPage: React.FC = () => {
     email: '',
     phone: '',
     numberOfTickets: 1
+  });
+  const navigate = useNavigate();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: event?.title || '',
+    description: event?.description || '',
+    startDate: event?.startDate ? event.startDate.toISOString().slice(0,16) : '',
+    endDate: event?.endDate ? event.endDate.toISOString().slice(0,16) : '',
+    location: event?.location || '',
+    price: event?.price || 0,
+    capacity: event?.capacity || 0,
   });
   
   if (!event) {
@@ -85,6 +98,56 @@ const EventDetailsPage: React.FC = () => {
   const availableTickets = event.capacity - event.registeredCount;
   const isUpcoming = new Date(event.startDate) > new Date();
 
+  const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setEditForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!event) return;
+    const { title, description, startDate, endDate, location, price, capacity } = editForm;
+    const { error } = await supabase
+      .from('events')
+      .update({
+        title,
+        description,
+        start_date: new Date(startDate).toISOString(),
+        end_date: new Date(endDate).toISOString(),
+        location,
+        price: Number(price),
+        capacity: Number(capacity),
+      })
+      .eq('id', event.id);
+    if (error) {
+      toast.error('Failed to update event');
+      return;
+    }
+    updateEvent(event.id, {
+      title,
+      description,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      location,
+      price: Number(price),
+      capacity: Number(capacity),
+    });
+    toast.success('Event updated!');
+    setIsEditing(false);
+  };
+
+  const handleDelete = async () => {
+    if (!event) return;
+    if (!window.confirm('Are you sure you want to delete this event? This action cannot be undone.')) return;
+    const { error } = await supabase.from('events').delete().eq('id', event.id);
+    if (error) {
+      toast.error('Failed to delete event');
+      return;
+    }
+    toast.success('Event deleted');
+    navigate('/events');
+  };
+
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-4">
@@ -136,7 +199,23 @@ const EventDetailsPage: React.FC = () => {
             )}
           </div>
 
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">{event.title}</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-4 flex items-center justify-between">
+            {event.title}
+            <span>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="inline-flex items-center px-3 py-1.5 mr-2 border border-blue-600 text-blue-600 rounded-md hover:bg-blue-50"
+              >
+                Edit
+              </button>
+              <button
+                onClick={handleDelete}
+                className="inline-flex items-center px-3 py-1.5 border border-red-600 text-red-600 rounded-md hover:bg-red-50"
+              >
+                Delete
+              </button>
+            </span>
+          </h1>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div className="col-span-2">
@@ -393,6 +472,47 @@ const EventDetailsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Edit Event Modal */}
+      {isEditing && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <form onSubmit={handleEditSubmit} className="bg-white rounded-lg p-8 w-full max-w-lg shadow-xl">
+            <h2 className="text-2xl font-bold mb-4">Edit Event</h2>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Title</label>
+              <input name="title" value={editForm.title} onChange={handleEditInputChange} className="w-full border rounded px-3 py-2" required />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Description</label>
+              <textarea name="description" value={editForm.description} onChange={handleEditInputChange} className="w-full border rounded px-3 py-2" required />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Start Date & Time</label>
+              <input type="datetime-local" name="startDate" value={editForm.startDate} onChange={handleEditInputChange} className="w-full border rounded px-3 py-2" required />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">End Date & Time</label>
+              <input type="datetime-local" name="endDate" value={editForm.endDate} onChange={handleEditInputChange} className="w-full border rounded px-3 py-2" required />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Location</label>
+              <input name="location" value={editForm.location} onChange={handleEditInputChange} className="w-full border rounded px-3 py-2" required />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Price</label>
+              <input type="number" name="price" value={editForm.price} onChange={handleEditInputChange} className="w-full border rounded px-3 py-2" min="0" required />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Capacity</label>
+              <input type="number" name="capacity" value={editForm.capacity} onChange={handleEditInputChange} className="w-full border rounded px-3 py-2" min="1" required />
+            </div>
+            <div className="flex justify-end space-x-2">
+              <button type="button" onClick={() => setIsEditing(false)} className="px-4 py-2 border rounded text-gray-600">Cancel</button>
+              <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded">Save</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 };

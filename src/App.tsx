@@ -15,7 +15,7 @@ function App() {
   return (
     <Router>
       <EventProvider>
-        <Toaster position="top-right" />
+        <Toaster position="top-right"/>
         <Layout>
           <Routes>
             <Route path="/" element={<HomePage />} />

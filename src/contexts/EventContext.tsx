@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Event, EventType } from '../types';
-import { mockEvents } from '../data/mockData';
+import { supabase } from '../lib/supabase';
 
 interface EventContextType {
   events: Event[];
@@ -30,23 +30,50 @@ export const EventProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Simulate API fetch
     const fetchEvents = async () => {
+      setLoading(true)
+      setError(null)
       try {
-        // In a real application, this would be an API call
-        setTimeout(() => {
-          setEvents(mockEvents);
-          setFilteredEvents(mockEvents);
-          setLoading(false);
-        }, 1000);
+        const { data, error } = await supabase
+          .from('events')
+          .select('*')
+          .order('created_at', { ascending: false })
+        if (error) throw error
+        if (!data) {
+          setEvents([])
+          setFilteredEvents([])
+          setLoading(false)
+          return
+        }
+        // Map DB rows to frontend Event type
+        const mappedEvents = data.map(row => ({
+          id: row.id,
+          title: row.title,
+          description: row.description,
+          startDate: new Date(row.start_date),
+          endDate: new Date(row.end_date),
+          location: row.location,
+          image: row.image || '',
+          capacity: row.capacity,
+          registeredCount: row.registered_count,
+          price: row.price,
+          society: '', // Not in DB, set as empty string
+          type: row.type.toLowerCase(),
+          stallsAvailable: row.stalls_available,
+          stallsBooked: row.stalls_booked,
+        }))
+        setEvents(mappedEvents)
+        setFilteredEvents(mappedEvents)
       } catch (err) {
-        setError('Failed to fetch events');
-        setLoading(false);
+        setError('Failed to fetch events')
+        setEvents([])
+        setFilteredEvents([])
+      } finally {
+        setLoading(false)
       }
-    };
-
-    fetchEvents();
-  }, []);
+    }
+    fetchEvents()
+  }, [])
 
   const filterEvents = (type?: EventType, society?: string, search?: string) => {
     let filtered = [...events];

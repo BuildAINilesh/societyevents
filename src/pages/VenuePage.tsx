@@ -3,57 +3,70 @@ import { MapPin, Building2, Users, Calendar, Clock, Image as ImageIcon, Phone, U
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import type { Database } from '../lib/database.types';
+import VenueDetails from '../components/Venues/VenueDetails';
 
-type Venue = Database['public']['Tables']['venues']['Insert'];
-type VenueRow = Database['public']['Tables']['venues']['Row'];
+type Venue = Database['public']['Tables']['venues']['Row'];
 
 interface VenueFormData {
   name: string;
   address: string;
   city: string;
   state: string;
-  pinCode: string;
-  capacity: string;
+  pin_code: string;
+  capacity: number;
   description: string;
-  contactPerson: string;
-  contactPhone: string;
-  contactEmail: string;
-  images: File[];
+  contact_person: string;
+  contact_phone: string;
+  contact_email: string;
+  price_per_day: number;
+  available_from: string;
+  available_until: string;
   amenities: string[];
-  pricePerDay: string;
-  availableDates: {
-    startDate: string;
-    endDate: string;
-  };
+  images: string[];
 }
+
+const amenityImageMap: Record<string, string> = {
+  'WiFi': 'https://images.unsplash.com/photo-1515378791036-0648a3ef77b2?auto=format&fit=crop&w=600&q=80', // modern conference room
+  'Garden': 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=600&q=80',
+  'Stage': 'https://images.unsplash.com/photo-1464983953574-0892a716854b?auto=format&fit=crop&w=600&q=80',
+  'Parking': 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=600&q=80',
+  'Outdoor Space': 'https://images.unsplash.com/photo-1465101046530-73398c7f28ca?auto=format&fit=crop&w=600&q=80',
+  'Catering': 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=600&q=80',
+  'Projector': 'https://images.unsplash.com/photo-1515168833906-d2a3b82b3029?auto=format&fit=crop&w=600&q=80',
+  'Sound System': 'https://images.unsplash.com/photo-1465101178521-c1a9136a3b99?auto=format&fit=crop&w=600&q=80',
+  'Dance Floor': 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=600&q=80',
+  'Restrooms': 'https://images.unsplash.com/photo-1507089947368-19c1da9775ae?auto=format&fit=crop&w=600&q=80',
+  'Kitchen': 'https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?auto=format&fit=crop&w=600&q=80',
+  'Security': 'https://images.unsplash.com/photo-1468421870903-4df1664ac249?auto=format&fit=crop&w=600&q=80',
+}
+const defaultVenueImage = 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=600&q=80';
 
 const VenuePage: React.FC = () => {
   const [showRegistrationForm, setShowRegistrationForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [venues, setVenues] = useState<VenueRow[]>([]);
+  const [venues, setVenues] = useState<Venue[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [formData, setFormData] = useState<VenueFormData>({
     name: '',
     address: '',
     city: '',
     state: '',
-    pinCode: '',
-    capacity: '',
+    pin_code: '',
+    capacity: 0,
     description: '',
-    contactPerson: '',
-    contactPhone: '',
-    contactEmail: '',
-    images: [],
+    contact_person: '',
+    contact_phone: '',
+    contact_email: '',
+    price_per_day: 0,
+    available_from: '',
+    available_until: '',
     amenities: [],
-    pricePerDay: '',
-    availableDates: {
-      startDate: '',
-      endDate: '',
-    },
+    images: [],
   });
 
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [imagePreview, setImagePreview] = useState<string[]>([]);
+  const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
 
   const amenitiesList = [
     'Parking',
@@ -85,7 +98,7 @@ const VenuePage: React.FC = () => {
       setVenues(data || []);
     } catch (error) {
       console.error('Error fetching venues:', error);
-      toast.error('Failed to load venues');
+      toast.error('Failed to fetch venues');
     } finally {
       setIsLoading(false);
     }
@@ -121,7 +134,7 @@ const VenuePage: React.FC = () => {
 
       setFormData(prev => ({
         ...prev,
-        images: [...prev.images, ...validFiles],
+        images: [...prev.images, ...validFiles.map(file => URL.createObjectURL(file))],
       }));
 
       // Create preview URLs
@@ -183,32 +196,32 @@ const VenuePage: React.FC = () => {
     try {
       // Validate form data
       if (!formData.name || !formData.address || !formData.city || !formData.state || 
-          !formData.capacity || !formData.description || !formData.contactPerson || 
-          !formData.contactPhone || !formData.contactEmail || !formData.pricePerDay || 
-          !formData.availableDates.startDate || !formData.availableDates.endDate) {
+          !formData.capacity || !formData.description || !formData.contact_person || 
+          !formData.contact_phone || !formData.contact_email || !formData.price_per_day || 
+          !formData.available_from || !formData.available_until) {
         throw new Error('Please fill in all required fields');
       }
 
       // Upload images first
-      const imageUrls = formData.images.length > 0 ? await uploadImages(formData.images) : [];
+      const imageUrls = formData.images.length > 0 ? await uploadImages(formData.images.map(url => new File([], ''))) : [];
 
       // Prepare venue data
-      const venueData: Venue = {
+      const venueData: Omit<Venue, 'id' | 'created_at' | 'updated_at' | 'created_by' | 'updated_by'> = {
         name: formData.name,
         address: formData.address,
         city: formData.city,
         state: formData.state,
-        pin_code: formData.pinCode,
-        capacity: parseInt(formData.capacity),
+        pin_code: formData.pin_code,
+        capacity: formData.capacity,
         description: formData.description,
-        contact_person: formData.contactPerson,
-        contact_phone: formData.contactPhone,
-        contact_email: formData.contactEmail,
+        contact_person: formData.contact_person,
+        contact_phone: formData.contact_phone,
+        contact_email: formData.contact_email,
         images: imageUrls,
         amenities: selectedAmenities,
-        price_per_day: parseFloat(formData.pricePerDay),
-        available_from: formData.availableDates.startDate,
-        available_until: formData.availableDates.endDate
+        price_per_day: formData.price_per_day,
+        available_from: formData.available_from,
+        available_until: formData.available_until
       };
 
       // Insert venue data into Supabase
@@ -232,19 +245,17 @@ const VenuePage: React.FC = () => {
         address: '',
         city: '',
         state: '',
-        pinCode: '',
-        capacity: '',
+        pin_code: '',
+        capacity: 0,
         description: '',
-        contactPerson: '',
-        contactPhone: '',
-        contactEmail: '',
-        images: [],
+        contact_person: '',
+        contact_phone: '',
+        contact_email: '',
+        price_per_day: 0,
+        available_from: '',
+        available_until: '',
         amenities: [],
-        pricePerDay: '',
-        availableDates: {
-          startDate: '',
-          endDate: '',
-        },
+        images: [],
       });
       setSelectedAmenities([]);
       setImagePreview([]);
@@ -260,398 +271,180 @@ const VenuePage: React.FC = () => {
     }
   };
 
+  const handleViewVenue = (venue: Venue) => {
+    setSelectedVenue(venue);
+  };
+
+  const handleCloseVenueDetails = () => {
+    setSelectedVenue(null);
+  };
+
+  const handleVenueDeleted = () => {
+    fetchVenues();
+  };
+
+  const handleVenueUpdated = () => {
+    fetchVenues();
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="mb-8 flex justify-between items-center">
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Venue Management</h1>
-          <p className="mt-2 text-gray-600">Register and manage venues for your events</p>
+          <p className="mt-2 text-gray-600">Manage and organize your event venues</p>
         </div>
         <button
           onClick={() => setShowRegistrationForm(true)}
-          className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
         >
-          Register New Venue
+          <Building2 className="w-5 h-5" />
+          <span>Add Venue</span>
         </button>
       </div>
 
-      {showRegistrationForm ? (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Venue Registration</h2>
-            <button
-              onClick={() => setShowRegistrationForm(false)}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              ✕
-            </button>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Basic Information */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                  Venue Name
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  required
+      {/* Venues Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {venues.map((venue) => (
+          <div
+            key={venue.id}
+            className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300"
+          >
+            {/* Venue Image */}
+            <div className="relative h-48">
+              {venue.images && venue.images.length > 0 ? (
+                <img
+                  src={venue.images[0]}
+                  alt={venue.name}
+                  className="w-full h-full object-cover"
                 />
-              </div>
-
-              <div>
-                <label htmlFor="capacity" className="block text-sm font-medium text-gray-700">
-                  Capacity
-                </label>
-                <input
-                  type="number"
-                  id="capacity"
-                  name="capacity"
-                  value={formData.capacity}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  required
+              ) : (
+                <img
+                  src={
+                    (venue.amenities && venue.amenities.length > 0 && amenityImageMap[venue.amenities.find(a => amenityImageMap[a])!]) || defaultVenueImage
+                  }
+                  alt="Venue placeholder"
+                  className="w-full h-full object-cover"
                 />
-              </div>
-            </div>
-
-            {/* Address Information */}
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="address" className="block text-sm font-medium text-gray-700">
-                  Address
-                </label>
-                <input
-                  type="text"
-                  id="address"
-                  name="address"
-                  value={formData.address}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <label htmlFor="city" className="block text-sm font-medium text-gray-700">
-                    City
-                  </label>
-                  <input
-                    type="text"
-                    id="city"
-                    name="city"
-                    value={formData.city}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="state" className="block text-sm font-medium text-gray-700">
-                    State
-                  </label>
-                  <input
-                    type="text"
-                    id="state"
-                    name="state"
-                    value={formData.state}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="pinCode" className="block text-sm font-medium text-gray-700">
-                    Pin Code
-                  </label>
-                  <input
-                    type="text"
-                    id="pinCode"
-                    name="pinCode"
-                    value={formData.pinCode}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    required
-                    pattern="[0-9]{6}"
-                    title="Please enter a valid 6-digit pin code"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Description */}
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-                Description
-              </label>
-              <textarea
-                id="description"
-                name="description"
-                value={formData.description}
-                onChange={handleInputChange}
-                rows={4}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            {/* Contact Information */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div>
-                <label htmlFor="contactPerson" className="block text-sm font-medium text-gray-700">
-                  Contact Person
-                </label>
-                <input
-                  type="text"
-                  id="contactPerson"
-                  name="contactPerson"
-                  value={formData.contactPerson}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label htmlFor="contactPhone" className="block text-sm font-medium text-gray-700">
-                  Contact Phone
-                </label>
-                <input
-                  type="tel"
-                  id="contactPhone"
-                  name="contactPhone"
-                  value={formData.contactPhone}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label htmlFor="contactEmail" className="block text-sm font-medium text-gray-700">
-                  Contact Email
-                </label>
-                <input
-                  type="email"
-                  id="contactEmail"
-                  name="contactEmail"
-                  value={formData.contactEmail}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Pricing and Availability */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div>
-                <label htmlFor="pricePerDay" className="block text-sm font-medium text-gray-700">
-                  Price per Day (₹)
-                </label>
-                <input
-                  type="number"
-                  id="pricePerDay"
-                  name="pricePerDay"
-                  value={formData.pricePerDay}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label htmlFor="availableDates.startDate" className="block text-sm font-medium text-gray-700">
-                  Available From
-                </label>
-                <input
-                  type="date"
-                  id="availableDates.startDate"
-                  name="availableDates.startDate"
-                  value={formData.availableDates.startDate}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label htmlFor="availableDates.endDate" className="block text-sm font-medium text-gray-700">
-                  Available Until
-                </label>
-                <input
-                  type="date"
-                  id="availableDates.endDate"
-                  name="availableDates.endDate"
-                  value={formData.availableDates.endDate}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Amenities */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Amenities
-              </label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {amenitiesList.map((amenity) => (
-                  <div key={amenity} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id={amenity}
-                      checked={selectedAmenities.includes(amenity)}
-                      onChange={() => handleAmenityToggle(amenity)}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                    />
-                    <label htmlFor={amenity} className="ml-2 text-sm text-gray-700">
-                      {amenity}
-                    </label>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Images */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Venue Images
-              </label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                <div className="space-y-1 text-center">
-                  <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
-                  <div className="flex text-sm text-gray-600">
-                    <label
-                      htmlFor="images"
-                      className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
-                    >
-                      <span>Upload images</span>
-                      <input
-                        id="images"
-                        name="images"
-                        type="file"
-                        multiple
-                        accept="image/*"
-                        onChange={handleImageChange}
-                        className="sr-only"
-                      />
-                    </label>
-                    <p className="pl-1">or drag and drop</p>
-                  </div>
-                  <p className="text-xs text-gray-500">PNG, JPG, GIF up to 10MB</p>
-                </div>
-              </div>
-
-              {/* Image Previews */}
-              {imagePreview.length > 0 && (
-                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {imagePreview.map((preview, index) => (
-                    <div key={index} className="relative group">
-                      <img
-                        src={preview}
-                        alt={`Preview ${index + 1}`}
-                        className="h-24 w-full object-cover rounded-lg"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveImage(index)}
-                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Remove image"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
               )}
+              <div className="absolute top-4 right-4">
+                <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+                  ₹{venue.price_per_day}/day
+                </span>
+              </div>
             </div>
 
-            <div className="flex justify-end space-x-4">
-              <button
-                type="button"
-                onClick={() => setShowRegistrationForm(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 ${
-                  isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                {isSubmitting ? 'Registering...' : 'Register Venue'}
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {isLoading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading venues...</p>
-            </div>
-          ) : venues.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {venues.map((venue) => (
-                <div key={venue.id} className="bg-white rounded-lg shadow-md p-6">
-                  <h3 className="text-xl font-semibold text-gray-900 mb-4">{venue.name}</h3>
-                  <div className="space-y-3">
-                    <div className="flex items-start">
-                      <MapPin className="h-5 w-5 text-gray-400 mt-0.5 mr-3" />
-                      <div>
-                        <p className="text-gray-900">{venue.address}</p>
-                        <p className="text-gray-600 text-sm">
-                          {venue.city}, {venue.state} - {venue.pin_code}
-                        </p>
-                      </div>
+            {/* Venue Info */}
+            <div className="p-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                {venue.name}
+              </h3>
+              
+              {/* Location */}
+              <div className="flex items-start space-x-2 mb-4">
+                <MapPin className="w-5 h-5 text-gray-500 mt-0.5" />
+                <div>
+                  <p className="text-gray-700">{venue.address}</p>
+                  <p className="text-gray-600 text-sm">
+                    {venue.city}, {venue.state}
+                  </p>
+                </div>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <div className="flex items-center space-x-2">
+                    <Users className="w-5 h-5 text-blue-600" />
+                    <div>
+                      <p className="text-sm text-gray-500">Capacity</p>
+                      <p className="font-semibold text-gray-900">{venue.capacity} people</p>
                     </div>
-                    <div className="flex items-center">
-                      <User className="h-5 w-5 text-gray-400 mr-3" />
-                      <p className="text-gray-600">{venue.contact_person}</p>
-                    </div>
-                    <div className="flex items-center">
-                      <Phone className="h-5 w-5 text-gray-400 mr-3" />
-                      <p className="text-gray-600">{venue.contact_phone}</p>
-                    </div>
-                    <div className="flex items-center">
-                      <Users className="h-5 w-5 text-gray-400 mr-3" />
-                      <p className="text-gray-600">Capacity: {venue.capacity} people</p>
-                    </div>
-                    <div className="flex items-center">
-                      <Calendar className="h-5 w-5 text-gray-400 mr-3" />
-                      <p className="text-gray-600">
-                        Available: {new Date(venue.available_from).toLocaleDateString()} - {new Date(venue.available_until).toLocaleDateString()}
+                  </div>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <div className="flex items-center space-x-2">
+                    <Calendar className="w-5 h-5 text-blue-600" />
+                    <div>
+                      <p className="text-sm text-gray-500">Available</p>
+                      <p className="font-semibold text-gray-900">
+                        {new Date(venue.available_from).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="text-center">
-                <Building2 size={48} className="mx-auto text-gray-400 mb-4" />
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">No Venues Found</h2>
-                <p className="text-gray-600 mb-6">
-                  Start by registering your first venue to host events.
-                </p>
+              </div>
+
+              {/* Amenities Preview */}
+              {venue.amenities && venue.amenities.length > 0 && (
+                <div className="mb-6">
+                  <p className="text-sm text-gray-500 mb-2">Available Amenities</p>
+                  <div className="flex flex-wrap gap-2">
+                    {venue.amenities.slice(0, 3).map((amenity, index) => (
+                      <span
+                        key={index}
+                        className="bg-blue-50 text-blue-700 px-2 py-1 rounded-full text-xs font-medium"
+                      >
+                        {amenity}
+                      </span>
+                    ))}
+                    {venue.amenities.length > 3 && (
+                      <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs font-medium">
+                        +{venue.amenities.length - 3} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => handleViewVenue(venue)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                >
+                  <span>View Details</span>
+                </button>
               </div>
             </div>
-          )}
+          </div>
+        ))}
+      </div>
+
+      {/* Empty State */}
+      {venues.length === 0 && !isLoading && (
+        <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+          <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">No Venues Found</h3>
+          <p className="text-gray-600 mb-6">
+            Start by adding your first venue to host events.
+          </p>
+          <button
+            onClick={() => setShowRegistrationForm(true)}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Add Your First Venue
+          </button>
+        </div>
+      )}
+
+      {/* Venue Details Modal */}
+      {selectedVenue && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <VenueDetails
+            venue={selectedVenue}
+            onClose={handleCloseVenueDetails}
+            onDelete={handleVenueDeleted}
+            onUpdate={handleVenueUpdated}
+          />
         </div>
       )}
     </div>
