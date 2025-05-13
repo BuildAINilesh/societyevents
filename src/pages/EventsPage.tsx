@@ -5,6 +5,11 @@ import AddEventForm from '../components/Events/AddEventForm';
 import { Search, Filter, Calendar, MapPin, Plus } from 'lucide-react';
 import { EventType } from '../types';
 import { mockSocieties } from '../data/mockData';
+import { supabase } from '../lib/supabase';
+import type { Database } from '../lib/database.types';
+import { Link } from 'react-router-dom';
+
+type Venue = Database['public']['Tables']['venues']['Row'];
 
 const EventsPage: React.FC = () => {
   const { filteredEvents, filterEvents, loading } = useEvents();
@@ -13,6 +18,8 @@ const EventsPage: React.FC = () => {
   const [selectedSociety, setSelectedSociety] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [showAddEventForm, setShowAddEventForm] = useState(false);
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [isVenuesLoading, setIsVenuesLoading] = useState(true);
 
   // Apply filters when search term, type, or society changes
   useEffect(() => {
@@ -22,6 +29,20 @@ const EventsPage: React.FC = () => {
       searchTerm || undefined
     );
   }, [searchTerm, selectedType, selectedSociety, filterEvents]);
+
+  useEffect(() => {
+    async function fetchVenues() {
+      setIsVenuesLoading(true);
+      const { data, error } = await supabase
+        .from('venues')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(3);
+      if (!error && data) setVenues(data);
+      setIsVenuesLoading(false);
+    }
+    fetchVenues();
+  }, []);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
@@ -240,49 +261,42 @@ const EventsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Featured societies */}
+      {/* Featured Venues */}
       <div className="mt-16">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Featured Societies</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {mockSocieties.slice(0, 3).map((society) => (
-            <div
-              key={society.id}
-              className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow"
-            >
-              <h3 className="text-xl font-bold text-gray-900 mb-2">{society.name}</h3>
-              <div className="flex items-center text-gray-600 mb-4">
-                <MapPin size={16} className="mr-1" />
-                <span className="text-sm">{society.location}</span>
-              </div>
-              <div className="flex flex-wrap gap-2 mb-4">
-                {society.amenities.map((amenity, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
-                  >
-                    {amenity}
-                  </span>
-                ))}
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-gray-500">
-                  {society.memberCount} members
-                </span>
-                {society.isPremium && (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                    Premium
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={() => setSelectedSociety(society.name)}
-                className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Featured Venues</h2>
+        {isVenuesLoading ? (
+          <div className="text-center py-8">Loading venues...</div>
+        ) : venues.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">No featured venues found.</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {venues.map(venue => (
+              <Link
+                to={`/venues/${venue.id}`}
+                key={venue.id}
+                className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow block focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label={`View details for ${venue.name}`}
+                tabIndex={0}
               >
-                View Events
-              </button>
-            </div>
-          ))}
-        </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">{venue.name}</h3>
+                <div className="flex items-center text-gray-600 mb-2">
+                  <MapPin size={16} className="mr-1" />
+                  <span className="text-sm">{venue.address}, {venue.city}, {venue.state} {venue.pin_code}</span>
+                </div>
+                <div className="text-gray-600 mb-2 text-sm">Capacity: {venue.capacity}</div>
+                <div className="text-gray-600 mb-2 text-sm">{venue.description}</div>
+                <div className="text-gray-600 mb-2 text-sm">Contact: {venue.contact_person} ({venue.contact_phone})</div>
+                <div className="text-gray-600 mb-2 text-sm">Email: {venue.contact_email}</div>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {venue.amenities.map((amenity: string, idx: number) => (
+                    <span key={idx} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{amenity}</span>
+                  ))}
+                </div>
+                <div className="text-blue-600 font-semibold text-sm">₹{venue.price_per_day} per day</div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Add Event Form Modal */}

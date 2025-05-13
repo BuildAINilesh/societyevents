@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
 import type { Database } from '../lib/database.types';
 import VenueDetails from '../components/Venues/VenueDetails';
+import { useParams } from 'react-router-dom';
+import AddVenueForm from '../components/Venues/AddVenueForm';
 
 type Venue = Database['public']['Tables']['venues']['Row'];
 
@@ -311,6 +313,13 @@ const VenuePage: React.FC = () => {
         </button>
       </div>
 
+      {/* Add Venue Modal */}
+      {showRegistrationForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <AddVenueForm onClose={() => setShowRegistrationForm(false)} onVenueAdded={fetchVenues} />
+        </div>
+      )}
+
       {/* Venues Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {venues.map((venue) => (
@@ -451,4 +460,39 @@ const VenuePage: React.FC = () => {
   );
 };
 
-export default VenuePage; 
+function VenueDetailsPage() {
+  const { id } = useParams<{ id: string }>();
+  const [venue, setVenue] = useState<Database['public']['Tables']['venues']['Row'] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    async function fetchVenue() {
+      setLoading(true);
+      setError(null);
+      const { data, error } = await supabase
+        .from('venues')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (error) setError('Venue not found');
+      setVenue(data || null);
+      setLoading(false);
+    }
+    if (id) fetchVenue();
+  }, [id]);
+  if (loading) return <div className="max-w-4xl mx-auto p-8 text-center">Loading venue...</div>;
+  if (error || !venue) return <div className="max-w-4xl mx-auto p-8 text-center text-red-500">Venue not found.</div>;
+  return (
+    <div className="flex justify-center items-center min-h-screen bg-gray-50">
+      <VenueDetails
+        venue={venue}
+        onClose={() => window.history.back()}
+        onDelete={() => window.location.replace('/venues')}
+        onUpdate={() => window.location.reload()}
+      />
+    </div>
+  );
+}
+
+export default VenuePage;
+export { VenueDetailsPage }; 

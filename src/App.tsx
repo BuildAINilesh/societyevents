@@ -7,7 +7,7 @@ import EventDetailsPage from './pages/EventDetailsPage';
 import VendorPortalPage from './pages/VendorPortalPage';
 import DashboardPage from './pages/DashboardPage';
 import CommunityPage from './pages/CommunityPage';
-import VenuePage from './pages/VenuePage';
+import VenuePage, { VenueDetailsPage } from './pages/VenuePage';
 import { EventProvider } from './contexts/EventContext';
 import { Toaster } from 'react-hot-toast';
 
@@ -25,6 +25,7 @@ function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/community" element={<CommunityPage />} />
             <Route path="/venues" element={<VenuePage />} />
+            <Route path="/venues/:id" element={<VenueDetailsPage />} />
           </Routes>
         </Layout>
       </EventProvider>
